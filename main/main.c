@@ -74,6 +74,21 @@ void app_main(void)
     ESP_LOGI(TAG, "GPS initialized successfully");
 
     /* ------------------------------------------------------ */
+    /* CAN Initialization */
+    /* ------------------------------------------------------ */
+
+    ESP_LOGI(TAG, "Initializing CAN interface...");
+
+    ret = can_init();
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "CAN initialization failed!");
+        return;
+    }
+
+    ESP_LOGI(TAG, "CAN initialized successfully");
+
+    /* ------------------------------------------------------ */
     /* Create IMU Task */
     /* ------------------------------------------------------ */
 
@@ -119,17 +134,30 @@ void app_main(void)
     ESP_LOGI(TAG, "GPS task started");
 
     /* ------------------------------------------------------ */
+    /* Create CAN Task */
+    /* ------------------------------------------------------ */
+
+    xTaskCreate(
+        can_task,
+        "can_task",
+        4096,
+        NULL,
+        5,
+        NULL
+    );
+
+    ESP_LOGI(TAG, "CAN task started");
+
+    /* ------------------------------------------------------ */
     /* Future Modules */
     /* ------------------------------------------------------ */
 
     /*
-    can_init();
     sd_card_init();
     telemetry_init();
     sensor_fusion_init();
     fault_monitor_init();
 
-    xTaskCreate(can_task, ...);
     xTaskCreate(sd_logger_task, ...);
     xTaskCreate(telemetry_task, ...);
     xTaskCreate(fault_monitor_task, ...);
