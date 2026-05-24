@@ -1,15 +1,19 @@
 #include <stdio.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include "esp_log.h"
 #include "esp_err.h"
 
+/* Drivers */
 #include "imu.h"
 #include "gps.h"
 #include "can.h"
 #include "sd_card.h"
 #include "rpm.h"
+
+/* System Modules */
 #include "telemetry.h"
 #include "sensor_fusion.h"
 #include "fault_monitor.h"
@@ -18,14 +22,45 @@
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Vehicle Telemetry System Initializing...");
+    ESP_LOGI(TAG, "=================================");
+    ESP_LOGI(TAG, "Vehicle Telemetry System Booting");
+    ESP_LOGI(TAG, "=================================");
 
-    esp_err_t ret = imu_init();
+    esp_err_t ret;
+
+    /* ------------------------------------------------------ */
+    /* IMU Initialization */
+    /* ------------------------------------------------------ */
+
+    ESP_LOGI(TAG, "Initializing IMU...");
+
+    ret = imu_init();
 
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "IMU initialization failed!");
         return;
     }
+
+    ESP_LOGI(TAG, "IMU initialized successfully");
+
+    /* ------------------------------------------------------ */
+    /* RPM Initialization */
+    /* ------------------------------------------------------ */
+
+    ESP_LOGI(TAG, "Initializing RPM module...");
+
+    ret = rpm_init();
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "RPM initialization failed!");
+        return;
+    }
+
+    ESP_LOGI(TAG, "RPM module initialized successfully");
+
+    /* ------------------------------------------------------ */
+    /* Create IMU Task */
+    /* ------------------------------------------------------ */
 
     xTaskCreate(
         imu_task,
@@ -37,4 +72,42 @@ void app_main(void)
     );
 
     ESP_LOGI(TAG, "IMU task started");
+
+    /* ------------------------------------------------------ */
+    /* Create RPM Task */
+    /* ------------------------------------------------------ */
+
+    xTaskCreate(
+        rpm_task,
+        "rpm_task",
+        4096,
+        NULL,
+        4,
+        NULL
+    );
+
+    ESP_LOGI(TAG, "RPM task started");
+
+    /* ------------------------------------------------------ */
+    /* Future Modules */
+    /* ------------------------------------------------------ */
+
+    /*
+    Example future expansion:
+
+    gps_init();
+    can_init();
+    sd_card_init();
+    telemetry_init();
+    sensor_fusion_init();
+    fault_monitor_init();
+
+    xTaskCreate(gps_task, ...);
+    xTaskCreate(can_task, ...);
+    xTaskCreate(sd_logger_task, ...);
+    xTaskCreate(telemetry_task, ...);
+    xTaskCreate(fault_monitor_task, ...);
+    */
+
+    ESP_LOGI(TAG, "System initialization complete");
 }
