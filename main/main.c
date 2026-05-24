@@ -59,6 +59,21 @@ void app_main(void)
     ESP_LOGI(TAG, "RPM module initialized successfully");
 
     /* ------------------------------------------------------ */
+    /* GPS Initialization */
+    /* ------------------------------------------------------ */
+
+    ESP_LOGI(TAG, "Initializing GPS module...");
+
+    ret = gps_init();
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "GPS initialization failed!");
+        return;
+    }
+
+    ESP_LOGI(TAG, "GPS initialized successfully");
+
+    /* ------------------------------------------------------ */
     /* Create IMU Task */
     /* ------------------------------------------------------ */
 
@@ -89,20 +104,31 @@ void app_main(void)
     ESP_LOGI(TAG, "RPM task started");
 
     /* ------------------------------------------------------ */
+    /* Create GPS Task */
+    /* ------------------------------------------------------ */
+
+    xTaskCreate(
+        gps_task,
+        "gps_task",
+        4096,
+        NULL,
+        4,
+        NULL
+    );
+
+    ESP_LOGI(TAG, "GPS task started");
+
+    /* ------------------------------------------------------ */
     /* Future Modules */
     /* ------------------------------------------------------ */
 
     /*
-    Example future expansion:
-
-    gps_init();
     can_init();
     sd_card_init();
     telemetry_init();
     sensor_fusion_init();
     fault_monitor_init();
 
-    xTaskCreate(gps_task, ...);
     xTaskCreate(can_task, ...);
     xTaskCreate(sd_logger_task, ...);
     xTaskCreate(telemetry_task, ...);
