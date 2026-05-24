@@ -12,6 +12,9 @@
 
 #include "esp_log.h"
 #include "esp_err.h"
+#include "shared_data.h"
+#include "freertos/semphr.h"
+#include "esp_timer.h"
 
 #define TAG "CAN"
 
@@ -232,6 +235,36 @@ void can_task(void *pvParameters)
                      * - Log to SD card
                      * - Sensor processing
                      */
+
+                     if (frame.id == 0x100 && frame.dlc >= 2) {
+
+        uint16_t speed_raw =
+            (frame.data[0] << 8) |
+             frame.data[1];
+
+        float speed_kmh =
+            speed_raw * 0.1f;
+
+        xSemaphoreTake(
+            g_telemetry_mutex,
+            portMAX_DELAY
+        );
+
+        g_telemetry_data.speed_kmh =
+            speed_kmh;
+
+        g_telemetry_data.timestamp_ms =
+            esp_timer_get_time() / 1000;
+
+        g_telemetry_data.can_last_update_ms =
+    esp_timer_get_time() / 1000;
+
+        xSemaphoreGive(g_telemetry_mutex);
+
+        ESP_LOGI(TAG,
+                 "Vehicle Speed: %.2f km/h",
+                 speed_kmh);
+    }
                 }
             }
 

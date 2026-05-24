@@ -13,6 +13,9 @@
 #include "driver/pulse_cnt.h"
 #include "esp_timer.h"
 
+#include "shared_data.h"
+#include "freertos/semphr.h"
+
 #define TAG "RPM"
 
 /* PCNT configuration */
@@ -197,34 +200,99 @@ void rpm_task(void *pvParameters)
 
         vTaskDelay(pdMS_TO_TICKS(RPM_SAMPLE_TIME_MS));
 
-        /* Read pulse count */
-        pcnt_unit_get_count(s_pcnt_unit, &pulse_count);
+        /* -------------------------------------- */
+        /* Read PCNT */
+        /* -------------------------------------- */
 
-        /* Clear counter for next sample window */
+        pcnt_unit_get_count(
+            s_pcnt_unit,
+            &pulse_count
+        );
+
         pcnt_unit_clear_count(s_pcnt_unit);
 
-        /* Convert to positive count */
         pulse_count = abs(pulse_count);
 
-        /* -------------------------------------------------- */
-        /* RPM calculation */
-        /* -------------------------------------------------- */
-
-        /*
-         * Formula:
-         *
-         * RPM =
-         * (pulses / pulses_per_rev)
-         * * (60000 / sample_time_ms)
-         */
+        /* -------------------------------------- */
+        /* RPM Calculation */
+        /* -------------------------------------- */
 
         s_rpm =
             ((float)pulse_count / RPM_PULSES_PER_REV)
             * (60000.0f / RPM_SAMPLE_TIME_MS);
 
-        /* -------------------------------------------------- */
-        /* Timeout / fault detection */
-        /* -------------------------------------------------- */
+        /* -------------------------------------- */
+        /* Timeout Detection */
+        /* -------------------------------------- */
+
+        if (pulse_count > 0) {
+            s_last_pulse_time_ms = get_time_ms();
+        }
+
+        int64_t elapsed =
+            get_time_ms() - s_last_pulse_time_ms;
+
+        if (elapsed > RPM_TIMEOUT_MS) {
+
+            s_rpm = 0.0f;
+
+            ESP_LOGW(
+                TAG,
+                "No RPM pulses detected "
+                "(%lld ms timeout)",
+                elapsed
+            );
+        }
+
+        /* -------------------------------------- */
+        /* Update Shared Data */
+        /* -------------------------------------- */
+
+        xSemaphoreTake(
+            g_telemetry_mutex,
+            portMAX_DELAY
+        );
+
+        g_telemetry_data.rpm = s_rpm;
+
+        g_telemetry_data.timestamp_ms =
+            esp_timer_get_time() / 1000;
+
+        g_telemetry_data.rpm_last_update_ms = esp_timer_get_time() / 1000;
+
+        xSemaphoreGive(g_telemetry_mutex);
+
+        /* -------------------------------------- */
+        /* Debug Logging */
+        /* -------------------------------------- */
+
+        ESP_LOGI(
+            TAG,
+            "Pulse Count: %d | RPM: %.2f",
+            pulse_count,
+            s_rpm
+        );
+    }
+}
+
+/*void rpm_task(void *pvParameters)
+{
+    int pulse_count = 0;
+
+    while (1) {
+
+        vTaskDelay(pdMS_TO_TICKS(RPM_SAMPLE_TIME_MS));
+
+        pcnt_unit_get_count(s_pcnt_unit, &pulse_count);
+
+        pcnt_unit_clear_count(s_pcnt_unit);
+
+
+        pulse_count = abs(pulse_count);
+
+        s_rpm =
+            ((float)pulse_count / RPM_PULSES_PER_REV)
+            * (60000.0f / RPM_SAMPLE_TIME_MS);
 
         if (pulse_count > 0) {
             s_last_pulse_time_ms = get_time_ms();
@@ -241,10 +309,7 @@ void rpm_task(void *pvParameters)
                      "No RPM pulses detected (%lld ms timeout)",
                      elapsed);
 
-            /*
-             * Future integration:
-             * fault_monitor_set(FAULT_RPM_SENSOR);
-             */
+        
         }
 
         ESP_LOGI(TAG,
@@ -252,7 +317,7 @@ void rpm_task(void *pvParameters)
                  pulse_count,
                  s_rpm);
     }
-}
+} */
 
 /*#include "rpm.h"
 #include <stdio.h>

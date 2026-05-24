@@ -10,6 +10,10 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 
+#include "shared_data.h"
+#include "freertos/semphr.h"
+#include "esp_timer.h"
+
 #define TAG "GPS"
 
 #define GPS_UART_PORT      UART_NUM_1
@@ -217,8 +221,110 @@ esp_err_t gps_get_latest(gps_data_t *out)
 /* ---------------------------------------------------------- */
 /* GPS Task */
 /* ---------------------------------------------------------- */
-
 void gps_task(void *pvParameters)
+{
+    uint8_t *data = (uint8_t *)malloc(GPS_BUF_SIZE);
+
+    if (data == NULL) {
+
+        ESP_LOGE(TAG,
+                 "Failed to allocate GPS buffer");
+
+        vTaskDelete(NULL);
+        return;
+    }
+
+    char line[128];
+    int line_pos = 0;
+
+    while (1) {
+
+        int len = uart_read_bytes(
+            GPS_UART_PORT,
+            data,
+            GPS_BUF_SIZE - 1,
+            pdMS_TO_TICKS(100)
+        );
+
+        if (len > 0) {
+
+            for (int i = 0; i < len; i++) {
+
+                char c = (char)data[i];
+
+                if (c == '\n') {
+
+                    line[line_pos] = '\0';
+
+                    parse_nmea(line);
+
+                    /* ---------------------------------- */
+                    /* Update Shared Data */
+                    /* ---------------------------------- */
+
+                    xSemaphoreTake(
+                        g_telemetry_mutex,
+                        portMAX_DELAY
+                    );
+
+                    g_telemetry_data.latitude =
+                        s_latest.latitude;
+
+                    g_telemetry_data.longitude =
+                        s_latest.longitude;
+
+                    g_telemetry_data.altitude_m =
+                        s_latest.altitude_m;
+
+                    g_telemetry_data.speed_kmh =
+                        s_latest.speed_kmh;
+
+                    g_telemetry_data.heading_deg =
+                        s_latest.heading_deg;
+
+                    g_telemetry_data.satellites =
+                        s_latest.satellites;
+
+                    g_telemetry_data.gps_fix_valid =
+                        s_latest.fix_valid;
+
+                    g_telemetry_data.timestamp_ms =
+                        esp_timer_get_time() / 1000;
+
+                    g_telemetry_data.gps_last_update_ms = esp_timer_get_time() / 1000;
+
+                    xSemaphoreGive(g_telemetry_mutex);
+
+                    ESP_LOGI(
+                        TAG,
+                        "Lat: %.6f Lon: %.6f "
+                        "Speed: %.2f km/h "
+                        "Alt: %.2f m "
+                        "Sats: %d",
+
+                        s_latest.latitude,
+                        s_latest.longitude,
+                        s_latest.speed_kmh,
+                        s_latest.altitude_m,
+                        s_latest.satellites
+                    );
+
+                    line_pos = 0;
+
+                } else {
+
+                    if (line_pos < sizeof(line) - 1) {
+                        line[line_pos++] = c;
+                    }
+                }
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
+/*void gps_task(void *pvParameters)
 {
     uint8_t *data = (uint8_t *)malloc(GPS_BUF_SIZE);
 
@@ -274,3 +380,4 @@ void gps_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
+    */

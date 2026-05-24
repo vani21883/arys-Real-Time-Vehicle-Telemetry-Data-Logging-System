@@ -6,4 +6,6 @@ idf_component_register(
         esp_common
         esp_driver_uart
         log
+        esp_timer
+        sd_card
 )

@@ -7,16 +7,19 @@
 #include "esp_err.h"
 
 /* Drivers */
+
 #include "imu.h"
 #include "gps.h"
 #include "can.h"
-#include "sd_card.h"
 #include "rpm.h"
-
-/* System Modules */
-#include "telemetry.h"
+#include "sd_card.h"
+#include "shared_data.h"
 #include "sensor_fusion.h"
 #include "fault_monitor.h"
+
+/* System Modules */
+
+#include "telemetry.h"
 
 #define TAG "MAIN"
 
@@ -29,67 +32,114 @@ void app_main(void)
     esp_err_t ret;
 
     /* ------------------------------------------------------ */
-    /* IMU Initialization */
+    /* IMU */
     /* ------------------------------------------------------ */
 
-    ESP_LOGI(TAG, "Initializing IMU...");
+    ESP_LOGI(TAG, "Initializing IMU");
 
     ret = imu_init();
 
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "IMU initialization failed!");
+        ESP_LOGE(TAG, "IMU init failed");
         return;
     }
 
-    ESP_LOGI(TAG, "IMU initialized successfully");
-
     /* ------------------------------------------------------ */
-    /* RPM Initialization */
+    /* RPM */
     /* ------------------------------------------------------ */
 
-    ESP_LOGI(TAG, "Initializing RPM module...");
+    ESP_LOGI(TAG, "Initializing RPM");
 
     ret = rpm_init();
 
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "RPM initialization failed!");
+        ESP_LOGE(TAG, "RPM init failed");
         return;
     }
 
-    ESP_LOGI(TAG, "RPM module initialized successfully");
-
     /* ------------------------------------------------------ */
-    /* GPS Initialization */
+    /* GPS */
     /* ------------------------------------------------------ */
 
-    ESP_LOGI(TAG, "Initializing GPS module...");
+    ESP_LOGI(TAG, "Initializing GPS");
 
     ret = gps_init();
 
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "GPS initialization failed!");
+        ESP_LOGE(TAG, "GPS init failed");
         return;
     }
 
-    ESP_LOGI(TAG, "GPS initialized successfully");
-
     /* ------------------------------------------------------ */
-    /* CAN Initialization */
+    /* CAN */
     /* ------------------------------------------------------ */
 
-    ESP_LOGI(TAG, "Initializing CAN interface...");
+    ESP_LOGI(TAG, "Initializing CAN");
 
     ret = can_init();
 
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "CAN initialization failed!");
+        ESP_LOGE(TAG, "CAN init failed");
         return;
     }
 
-    ESP_LOGI(TAG, "CAN initialized successfully");
+    /* ------------------------------------------------------ */
+    /* TELEMETRY */
+    /* ------------------------------------------------------ */
+
+    ESP_LOGI(TAG, "Initializing telemetry");
+
+    ret = telemetry_init();
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Telemetry init failed");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Initializing Sensor Fusion");
+
+ret = sensor_fusion_init();
+
+if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Sensor fusion init failed");
+    return;
+}
+
+ESP_LOGI(TAG, "Initializing Fault Monitor");
+
+ret = fault_monitor_init();
+
+if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Fault monitor init failed");
+    return;
+}
 
     /* ------------------------------------------------------ */
-    /* Create IMU Task */
+    /* SD CARD */
+    /* ------------------------------------------------------ */
+
+    ESP_LOGI(TAG, "Initializing SD card");
+
+    ret = sd_card_init();
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SD card init failed");
+        return;
+    }
+
+    g_telemetry_mutex = xSemaphoreCreateMutex();
+
+if (g_telemetry_mutex == NULL) {
+
+    ESP_LOGE(TAG,
+             "Failed to create telemetry mutex");
+
+    return;
+}
+
+
+    /* ------------------------------------------------------ */
+    /* CREATE TASKS */
     /* ------------------------------------------------------ */
 
     xTaskCreate(
@@ -101,12 +151,6 @@ void app_main(void)
         NULL
     );
 
-    ESP_LOGI(TAG, "IMU task started");
-
-    /* ------------------------------------------------------ */
-    /* Create RPM Task */
-    /* ------------------------------------------------------ */
-
     xTaskCreate(
         rpm_task,
         "rpm_task",
@@ -115,12 +159,6 @@ void app_main(void)
         4,
         NULL
     );
-
-    ESP_LOGI(TAG, "RPM task started");
-
-    /* ------------------------------------------------------ */
-    /* Create GPS Task */
-    /* ------------------------------------------------------ */
 
     xTaskCreate(
         gps_task,
@@ -131,12 +169,6 @@ void app_main(void)
         NULL
     );
 
-    ESP_LOGI(TAG, "GPS task started");
-
-    /* ------------------------------------------------------ */
-    /* Create CAN Task */
-    /* ------------------------------------------------------ */
-
     xTaskCreate(
         can_task,
         "can_task",
@@ -146,22 +178,42 @@ void app_main(void)
         NULL
     );
 
-    ESP_LOGI(TAG, "CAN task started");
+    xTaskCreate(
+        telemetry_task,
+        "telemetry_task",
+        4096,
+        NULL,
+        3,
+        NULL
+    );
 
-    /* ------------------------------------------------------ */
-    /* Future Modules */
-    /* ------------------------------------------------------ */
+    xTaskCreate(
+        sd_card_task,
+        "sd_card_task",
+        4096,
+        NULL,
+        2,
+        NULL
+    );
 
-    /*
-    sd_card_init();
-    telemetry_init();
-    sensor_fusion_init();
-    fault_monitor_init();
+    xTaskCreate(
+    sensor_fusion_task,
+    "sensor_fusion_task",
+    4096,
+    NULL,
+    3,
+    NULL
+);
 
-    xTaskCreate(sd_logger_task, ...);
-    xTaskCreate(telemetry_task, ...);
-    xTaskCreate(fault_monitor_task, ...);
-    */
+xTaskCreate(
+    fault_monitor_task,
+    "fault_monitor_task",
+    4096,
+    NULL,
+    3,
+    NULL
+);
 
-    ESP_LOGI(TAG, "System initialization complete");
+    ESP_LOGI(TAG,
+             "System initialization complete");
 }

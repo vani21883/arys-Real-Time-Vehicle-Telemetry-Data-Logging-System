@@ -10,6 +10,10 @@
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 
+#include "shared_data.h"
+#include "freertos/semphr.h"
+#include "esp_timer.h"
+
 #define TAG "IMU"
 
 /* I2C Configuration */
@@ -264,6 +268,66 @@ void imu_task(void *pvParameters)
 
         if (imu_read(&data) == ESP_OK) {
 
+            /* -------------------------------------- */
+            /* Update Shared Telemetry */
+            /* -------------------------------------- */
+
+            xSemaphoreTake(
+                g_telemetry_mutex,
+                portMAX_DELAY
+            );
+
+            g_telemetry_data.accel_x = data.accel_x;
+            g_telemetry_data.accel_y = data.accel_y;
+            g_telemetry_data.accel_z = data.accel_z;
+
+            g_telemetry_data.gyro_x = data.gyro_x;
+            g_telemetry_data.gyro_y = data.gyro_y;
+            g_telemetry_data.gyro_z = data.gyro_z;
+
+            g_telemetry_data.imu_temp_c = data.temp_c;
+
+            g_telemetry_data.timestamp_ms =
+                esp_timer_get_time() / 1000;
+
+            g_telemetry_data.imu_last_update_ms = esp_timer_get_time() / 1000;
+
+            xSemaphoreGive(g_telemetry_mutex);
+
+            /* -------------------------------------- */
+            /* Debug Logging */
+            /* -------------------------------------- */
+
+            ESP_LOGI(
+                TAG,
+                "ACCEL [%.2f %.2f %.2f] m/s² | "
+                "GYRO [%.2f %.2f %.2f] dps | "
+                "TEMP %.2f C",
+
+                data.accel_x,
+                data.accel_y,
+                data.accel_z,
+
+                data.gyro_x,
+                data.gyro_y,
+                data.gyro_z,
+
+                data.temp_c
+            );
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+/*void imu_task(void *pvParameters)
+{
+    imu_data_t data;
+
+    while (1) {
+
+        if (imu_read(&data) == ESP_OK) {
+
             ESP_LOGI(
                 TAG,
                 "ACCEL [%.2f %.2f %.2f] m/s² | "
@@ -281,7 +345,7 @@ void imu_task(void *pvParameters)
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-}
+} */
 
 
 
